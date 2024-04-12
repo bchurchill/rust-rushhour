@@ -1,4 +1,6 @@
 
+use std::collections::HashSet;
+
 // row 0
 // row 1
 // row 2
@@ -6,7 +8,7 @@
 // row 4
 //  col  0  1  2  3  4
 
-#[derive(Clone)]
+#[derive(Clone, Hash, Eq, PartialEq)]
 struct Car {
     horizontal: bool,
     is_target: bool,
@@ -15,7 +17,7 @@ struct Car {
     size: u32
 }
 
-#[derive(Clone)]
+#[derive(Clone, Hash, Eq, PartialEq)]
 struct Board {
     cars: Vec<Car>
 }
@@ -56,19 +58,68 @@ fn sample_board() -> Board {
         col: 0,
         size: 3
     };
+    let car1 = Car {
+        horizontal: false,
+        is_target: false,
+        row: 4,
+        col: 0,
+        size: 2 
+    };
+    let car2 = Car {
+        horizontal: false,
+        is_target: false,
+        row: 4,
+        col: 1,
+        size: 2 
+    };
+    let car3 = Car {
+        horizontal: false,
+        is_target: false,
+        row: 4,
+        col: 2,
+        size: 2 
+    };
+    let car4 = Car {
+        horizontal: true,
+        is_target: false,
+        row: 4,
+        col: 4,
+        size: 2 
+    };
+    let car5 = Car {
+        horizontal: true,
+        is_target: false,
+        row: 5,
+        col: 4,
+        size: 2 
+    };
+
+
     let puzzle = Board {
-        cars: vec![red, teal, bus, violet, truck]
+        cars: vec![red, teal, bus, violet, truck, car1, car2, car3, car4, car5]
     };
     return puzzle;
+}
+
+fn is_winning(board : &Board) -> bool {
+
+    for car in board.cars.iter() {
+        if !car.is_target {
+            continue;
+        }
+
+        return car.size + car.col == 6;
+    }
+
+    panic!("could not find target car!");
 }
 
 fn space_for_move(board : &Board, car : &Car, forward: bool) -> u32 {
 
     if car.horizontal {
         if forward {
-            println!("vertical size={}, col={}", car.size, car.col);
             let max_space = 6-car.size-car.col;
-            for i in 1..max_space {
+            for i in 1..=max_space {
                 if find_car_at(board, car.row, car.col + car.size + i - 1).is_some() {
                     return i - 1;
                 }
@@ -76,7 +127,7 @@ fn space_for_move(board : &Board, car : &Car, forward: bool) -> u32 {
             return max_space;
         } else {
             let max_space = car.col;
-            for i in 1..max_space {
+            for i in 1..=max_space {
                 if find_car_at(board, car.row, car.col - i).is_some() {
                     return i - 1;
                 }
@@ -87,7 +138,7 @@ fn space_for_move(board : &Board, car : &Car, forward: bool) -> u32 {
     } else {
         if forward {
             let max_space = 6-car.size-car.row;
-            for i in 1..max_space {
+            for i in 1..=max_space {
                 if find_car_at(board, car.row + car.size + i - 1, car.col).is_some() {
                     return i - 1;
                 }
@@ -95,7 +146,7 @@ fn space_for_move(board : &Board, car : &Car, forward: bool) -> u32 {
             return max_space;
         } else {
             let max_space = car.row;
-            for i in 1..max_space {
+            for i in 1..=max_space {
                 if find_car_at(board, car.row - i, car.col).is_some() {
                     return i - 1;
                 }
@@ -119,8 +170,7 @@ fn moves_from(board : &Board) -> Vec<Board> {
         let start_delta = -(backward_space as i32);
         let end_delta = forward_space as i32;
 
-        println!("car index {} can move {} to {}", index, start_delta, end_delta);
-        for delta in start_delta..end_delta {
+        for delta in start_delta..=end_delta {
             // moving a car 0 spaces doesn't count as a move
             if delta == 0 {
                 continue;
@@ -193,12 +243,70 @@ fn print_board(board : &Board) {
     println!("--------------------");
 }
 
+fn find_solution(board : &Board) -> Option<Board> {
+
+    // queue of boards to explore
+    let mut queue = Vec::new();
+    queue.push(board.clone());
+
+    // queue of boards to explore on next iteration
+    let mut next_queue = Vec::new();
+
+    // keep track of what's been added in the past
+    let mut added = HashSet::new();
+    added.insert(board.clone());
+
+    let mut round = 0;
+
+    while !queue.is_empty() {
+
+        println!("---> starting from here!");
+        let current = queue.remove(0);
+        print_board(&current);
+
+        // Add subsequent boards to the queue
+        let moves = moves_from(&current);
+
+        for new_board in moves {
+
+            // Check if this board is winning
+            if is_winning(&new_board) {
+                return Some(new_board);
+            }
+
+            // Check if we've been here before
+            if added.contains(&new_board) {
+                continue;
+            }
+
+            // Print the board as interesting
+            print_board(&new_board);
+            added.insert(new_board.clone());
+            next_queue.push(new_board);
+        }
+
+        if queue.is_empty() {
+            round += 1;
+            println!("========  Round {}  =========", round);
+            queue = next_queue;
+            next_queue = Vec::new();
+        }
+    }
+
+    return None;
+}
+
 
 fn main() {
     let board = sample_board();
     print_board(&board);
-    let options = moves_from(&board);
-    for option in options {
-        print_board(&option);
+
+    let solution = find_solution(&board);
+    match solution {
+        None => println!("No solution found!"),
+        Some(b) => {
+            println!("Got a solution!");
+            print_board(&b);
+        }
     }
 }
