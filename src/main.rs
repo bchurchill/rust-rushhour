@@ -1,13 +1,26 @@
 
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 // row 0
 // row 1
 // row 2
 // row 3
 // row 4
-//  col  0  1  2  3  4
+// row 5
+// col   0  1  2  3  4 5
 
+const DEBUG : bool = false;
+
+macro_rules! debug {
+
+    ($($arg:tt)*) => {
+        if DEBUG {
+            println!($($arg)*);
+        }
+    }
+}
+
+// Data structure for each car
 #[derive(Clone, Hash, Eq, PartialEq)]
 struct Car {
     horizontal: bool,
@@ -17,11 +30,13 @@ struct Car {
     size: u32
 }
 
+// Data structure to represent the game state
 #[derive(Clone, Hash, Eq, PartialEq)]
 struct Board {
     cars: Vec<Car>
 }
 
+// Create the sample board, provided as level 1 demo online
 fn sample_board() -> Board {
     let red = Car {
         horizontal: true,
@@ -101,6 +116,7 @@ fn sample_board() -> Board {
     return puzzle;
 }
 
+// Check if the target car is in the right place to win the game
 fn is_winning(board : &Board) -> bool {
 
     for car in board.cars.iter() {
@@ -114,6 +130,8 @@ fn is_winning(board : &Board) -> bool {
     panic!("could not find target car!");
 }
 
+// For a given car on the board, see how many spaces it can move
+// (either forward or backward)
 fn space_for_move(board : &Board, car : &Car, forward: bool) -> u32 {
 
     if car.horizontal {
@@ -157,6 +175,7 @@ fn space_for_move(board : &Board, car : &Car, forward: bool) -> u32 {
     }
 }
 
+// For a given board position, find all possible subsequent states
 fn moves_from(board : &Board) -> Vec<Board> {
 
     let mut output = Vec::new();
@@ -195,6 +214,7 @@ fn moves_from(board : &Board) -> Vec<Board> {
     return output;
 }
 
+// Check which car is at a certain position on the board
 fn find_car_at(board : &Board, row: u32, col: u32) -> Option<u32> {
     
     for (index, car) in board.cars.iter().enumerate() {
@@ -226,6 +246,7 @@ fn find_car_at(board : &Board, row: u32, col: u32) -> Option<u32> {
     return None;
 }
 
+// Print the board to the console
 fn print_board(board : &Board) {
     
     println!("--------------------");
@@ -243,7 +264,52 @@ fn print_board(board : &Board) {
     println!("--------------------");
 }
 
-fn find_solution(board : &Board) -> Option<Board> {
+// Used for debugging the mapping during the breadth first
+// search that shows the shortest path to a given board position.
+fn print_path_map(mapping : &HashMap<Board, Option<Board>>) {
+    println!("Showing mapping");
+    for (k,v) in mapping {
+        println!("------------------------------");
+        print_board(&k);
+        println!("---->");
+        match v {
+            None => println!("None"),
+            Some(b) => print_board(&b)
+        }
+        println!("------------------------------");
+    }
+}
+
+// Convert the shortest path mapping into a vector that shows the steps in the solution
+fn build_solution_vector(solution : &Board, mapping : HashMap<Board, Option<Board>>) -> Vec<Board> {
+
+    let mut output = Vec::new();
+    let mut current = solution;
+    output.push(current.clone());
+
+    if DEBUG {
+        print_path_map(&mapping);
+    }
+
+    while mapping.contains_key(current) {
+        match mapping.get(current) {
+            None => panic!("can't find shortest path for solution"),
+            Some(None) => { 
+                break; 
+            }
+            Some(Some(b)) => {
+                current = b;
+                output.push(current.clone());
+            }
+        }
+    }
+
+    return output;
+}
+
+
+// Perform a breadth first search to find the shortest solution to the puzzle
+fn find_solution(board : &Board) -> Option<Vec<Board>> {
 
     // queue of boards to explore
     let mut queue = Vec::new();
@@ -252,42 +318,51 @@ fn find_solution(board : &Board) -> Option<Board> {
     // queue of boards to explore on next iteration
     let mut next_queue = Vec::new();
 
-    // keep track of what's been added in the past
-    let mut added = HashSet::new();
-    added.insert(board.clone());
+    // keep track of what's been path_map in the past
+    // and the shortest path back to the root
+    let mut path_map = HashMap::new();
+    path_map.insert(board.clone(), None);
 
     let mut round = 0;
 
     while !queue.is_empty() {
 
-        println!("---> starting from here!");
+        debug!("---> starting from here!");
         let current = queue.remove(0);
-        print_board(&current);
+        if DEBUG {
+            print_board(&current);
+        }
 
         // Add subsequent boards to the queue
         let moves = moves_from(&current);
 
         for new_board in moves {
 
-            // Check if this board is winning
-            if is_winning(&new_board) {
-                return Some(new_board);
-            }
-
             // Check if we've been here before
-            if added.contains(&new_board) {
+            if path_map.contains_key(&new_board) {
                 continue;
             }
 
-            // Print the board as interesting
-            print_board(&new_board);
-            added.insert(new_board.clone());
+            if DEBUG {
+                // print new boards we find
+                print_board(&new_board);
+            }
+
+            // Add the board to the path mapping
+            path_map.insert(new_board.clone(), Some(current.clone()));
+
+            // Check if this board is winning
+            if is_winning(&new_board) {
+                return Some(build_solution_vector(&new_board, path_map));
+            }
+
+            // Save for next iteration
             next_queue.push(new_board);
         }
 
         if queue.is_empty() {
             round += 1;
-            println!("========  Round {}  =========", round);
+            debug!("========  Round {}  =========", round);
             queue = next_queue;
             next_queue = Vec::new();
         }
@@ -297,6 +372,7 @@ fn find_solution(board : &Board) -> Option<Board> {
 }
 
 
+// Solve the sample board and print the solution.
 fn main() {
     let board = sample_board();
     print_board(&board);
@@ -304,9 +380,12 @@ fn main() {
     let solution = find_solution(&board);
     match solution {
         None => println!("No solution found!"),
-        Some(b) => {
-            println!("Got a solution!");
-            print_board(&b);
+        Some(mut boards) => {
+            boards.reverse();
+            debug!("Got a solution!");
+            for board in boards {
+                print_board(&board);
+            }
         }
     }
 }
